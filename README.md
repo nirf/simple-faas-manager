@@ -12,3 +12,12 @@ curl --header "Content-Type: application/json" --request POST --data '{"message"
 ```
 curl http://localhost:8000/statistics
 ```
+## Test
+### install loadtest globally
+``
+npm i -g loadtest
+``
+</br>
+``
+loadtest -n 480 -c 16  -H "Content-Type: application/json" -P '{"message":"xyz"}' -m POST --rps 16 http://localhost:8000/messages
+``
