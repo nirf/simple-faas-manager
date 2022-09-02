@@ -19,5 +19,5 @@ npm i -g loadtest
 ``
 </br>
 ``
-loadtest -n 480 -c 16  -H "Content-Type: application/json" -P '{"message":"xyz"}' -m POST --rps 16 http://localhost:8000/messages
+loadtest -n 100 -c 10  -T 'application/json' --data '{"message":"it is better to burn out than to fade away"}' -m POST --rps 10  http://localhost:8000/messages
 ``

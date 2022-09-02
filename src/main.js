@@ -3,16 +3,18 @@ const bodyParser = require('body-parser')
 const Queue = require('queue-fifo')
 const {v4: uuidv4} = require('uuid')
 const {fork} = require('child_process')
+const fs = require('fs')
 
 const queue = new Queue()
 const activeInstancesMap = new Map()
 const warmInstancesQueueMap = new Map()
 let totalInvocations = 0
 const app = express()
-const port = process.env.PORT || 8000
+let sharedFile = fs.openSync(process.env.FILE_NAME, 'a+')
 
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({extended: true}))
+
 
 app.get('/', (req, res) => {
     res.send('OK')
@@ -31,25 +33,28 @@ app.get('/statistics', (req, res) => {
     })
 })
 
-app.listen(port, () => {
-    console.log(`App is Listening on port ${port}`)
+app.listen(process.env.PORT, () => {
+    console.log(`App is Listening on port ${process.env.PORT}`)
 })
 
 setInterval(() => {
-    if (!queue.isEmpty()) {
+    let i = 0
+    while (!queue.isEmpty() && i < process.env.POLLING_BATCH_SIZE) {
         const message = queue.dequeue()
         console.log('Polling a message from the queue', message)
         const childProcess = getOrCreateProcess()
         console.log(childProcess.created ? 'Create a new process instance' : 'Get a warm process instance')
         if (childProcess.created) {
-            listenForChildProcessMessages(childProcess.instance)
+            listenForChildProcessEvents(childProcess.instance)
         }
         childProcess.instance.send({
-            action: 'start', ...message
+            action: 'start',
+            ...message
         })
         activeInstancesMap.set(message.id, childProcess.instance)
+        i++
     }
-}, 100)
+}, process.env.POLLING_INTERVAL_MS)
 
 function getOrCreateProcess() {
     if (warmInstancesQueueMap.size > 0) {
@@ -61,7 +66,7 @@ function getOrCreateProcess() {
     }
 }
 
-function listenForChildProcessMessages(childProcess) {
+function listenForChildProcessEvents(childProcess) {
     childProcess.on('message', (msg) => {
         console.log('Listening for child message', msg)
         switch (msg.action) {
@@ -72,6 +77,12 @@ function listenForChildProcessMessages(childProcess) {
                 killProcessById(msg.id)
                 break
         }
+    })
+
+    childProcess.on('uncaughtException', (err, origin) => {
+        console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+        console.log(err, origin)
+        console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
     })
 }
 
@@ -89,3 +100,10 @@ function killProcessById(id) {
         childProcess.kill()
     }
 }
+
+process.on('SIGINT', () => {
+    if (sharedFile) {
+        fs.closeSync(sharedFile)
+    }
+    process.exit(0)
+})
