@@ -15,11 +15,6 @@ let sharedFile = fs.openSync(process.env.FILE_NAME, 'a+')
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({extended: true}))
 
-
-app.get('/', (req, res) => {
-    res.send('OK')
-})
-
 app.post('/messages', (req, res) => {
     const message = req.body
     message.id = uuidv4()
@@ -29,7 +24,8 @@ app.post('/messages', (req, res) => {
 
 app.get('/statistics', (req, res) => {
     res.json({
-        active_instances: activeInstancesMap.size, total_invocation: totalInvocations
+        active_instances: activeInstancesMap.size,
+        total_invocation: totalInvocations
     })
 })
 
@@ -51,7 +47,11 @@ setInterval(() => {
             action: 'start',
             ...message
         })
-        activeInstancesMap.set(message.id, childProcess.instance)
+        activeInstancesMap.set(message.id, {
+            retries: 0,
+            process: childProcess.instance,
+            message: message.message
+        })
         i++
     }
 }, process.env.POLLING_INTERVAL_MS)
@@ -76,21 +76,18 @@ function listenForChildProcessEvents(childProcess) {
             case 'kill':
                 killProcessById(msg.id)
                 break
+            case 'error':
+                handleErrorById(msg.id)
+                break
         }
-    })
-
-    childProcess.on('uncaughtException', (err, origin) => {
-        console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        console.log(err, origin)
-        console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
     })
 }
 
 function finishProcessById(id) {
     totalInvocations++
-    const childProcess = activeInstancesMap.get(id)
+    const processData = activeInstancesMap.get(id)
     activeInstancesMap.delete(id)
-    warmInstancesQueueMap.set(id, childProcess)
+    warmInstancesQueueMap.set(id, processData.process)
 }
 
 function killProcessById(id) {
@@ -98,6 +95,24 @@ function killProcessById(id) {
         const childProcess = warmInstancesQueueMap.get(id)
         warmInstancesQueueMap.delete(id)
         childProcess.kill()
+    }
+}
+
+function handleErrorById(id) {
+    const processData = activeInstancesMap.get(id)
+    processData.retries++
+    if (processData.retries <= parseInt(process.env.MAX_RETRY_ATTEMPTS)) {
+        console.log(`Retry message.id:${id} for the ${processData.retries}'rd time`)
+        activeInstancesMap.set(id, processData)
+        processData.process.send({
+            action: 'start',
+            id,
+            message: processData.message
+        })
+    } else {
+        console.log(`Reached Max num of retries (${process.env.MAX_RETRY_ATTEMPTS}) for message.id:${id}`)
+        activeInstancesMap.delete(id)
+        processData.process.kill()
     }
 }
 

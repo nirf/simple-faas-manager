@@ -9,10 +9,18 @@ process.on('message', async (msg) => {
 
 async function invokeHandler(msg) {
     await sleep(5 * 1000)
-    // append message to shared file
-    const releaseFun = await lockfile.lock(process.env.FILE_NAME)
-    await fsPromises.appendFile(process.env.FILE_NAME, msg.message + '\n')
-    await releaseFun()
+    try {
+        const releaseFunc = await lockfile.lock(process.env.FILE_NAME)
+        await fsPromises.appendFile(process.env.FILE_NAME, msg.message + '\n')
+        await releaseFunc()
+    } catch (e) {
+        process.send({
+            action: 'error',
+            error: e.message,
+            id: msg.id
+        })
+        return
+    }
     process.send({
         action: 'finish',
         id: msg.id
