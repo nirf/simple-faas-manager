@@ -1,8 +1,6 @@
-/*
-1. receive as input the messages
-2. then sleep for 5 seconds
-3. and will print the content of the messages to a shared file (append only)
-*/
+const lockfile = require('proper-lockfile')
+const fsPromises = require('fs').promises
+
 process.on('message', async (msg) => {
     if (msg.action === 'start') {
         await invokeHandler(msg)
@@ -12,13 +10,15 @@ process.on('message', async (msg) => {
 async function invokeHandler(msg) {
     await sleep(5 * 1000)
     // append message to shared file
-    const textMessage = msg.message
+    const releaseFun = await lockfile.lock(process.env.FILE_NAME)
+    await fsPromises.appendFile(process.env.FILE_NAME, msg.message + '\n')
+    await releaseFun()
     process.send({
         action: 'finish',
         id: msg.id
     })
     // entering freezing state ("warm")
-    await sleep(2 * 1000)
+    await sleep(process.env.FREEZE_STATE_MS)
     process.send({
         action: 'kill',
         id: msg.id
