@@ -1,5 +1,6 @@
 const lockfile = require('proper-lockfile')
 const fsPromises = require('fs').promises
+let freezingStateInMs
 
 process.on('message', async (msg) => {
     if (msg.action === 'start') {
@@ -8,6 +9,9 @@ process.on('message', async (msg) => {
 })
 
 async function invokeHandler(msg) {
+    if (!freezingStateInMs) {
+        freezingStateInMs = parseInt(process.env.FREEZE_STATE_MS)
+    }
     await sleep(5 * 1000)
     try {
         const releaseFunc = await lockfile.lock(process.env.FILE_NAME)
@@ -26,7 +30,7 @@ async function invokeHandler(msg) {
         id: msg.id
     })
     // entering freezing state ("warm")
-    await sleep(process.env.FREEZE_STATE_MS)
+    await sleep(freezingStateInMs)
     process.send({
         action: 'kill',
         id: msg.id
