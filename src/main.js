@@ -1,16 +1,18 @@
 const express = require('express')
 const bodyParser = require('body-parser')
 const Queue = require('queue-fifo')
-const {v4: uuidv4} = require('uuid')
-const {fork} = require('child_process')
+const { v4: uuidv4 } = require('uuid')
+const { fork } = require('child_process')
 const fs = require('fs')
+const { init } = require('./config')
 
+const config = init()
 const queue = new Queue()
 const activeInstancesMap = new Map()
 const warmInstancesQueueMap = new Map()
 let totalInvocations = 0
 const app = express()
-let sharedFile = fs.openSync(process.env.FILE_NAME, 'a+')
+let sharedFile = fs.openSync(config.FILE_NAME, 'a+')
 
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({extended: true}))
@@ -29,19 +31,19 @@ app.get('/statistics', (req, res) => {
     })
 })
 
-app.listen(process.env.PORT, () => {
-    console.log(`App is Listening on port ${process.env.PORT}`)
+app.listen(config.PORT, () => {
+    console.log(`App is Listening on port ${config.PORT}`)
 })
 
 setInterval(() => {
     let i = 0
-    while (!queue.isEmpty() && i < process.env.POLLING_BATCH_SIZE) {
+    while (!queue.isEmpty() && i < config.POLLING_BATCH_SIZE) {
         const message = queue.dequeue()
         console.log('Polling a message from the queue', message)
         const childProcess = getOrCreateProcess()
         console.log(childProcess.created ? 'Create a new process instance' : 'Get a warm process instance')
         if (childProcess.created) {
-            listenForChildProcessEvents(childProcess.instance)
+            listenOnChildProcessMessageEvent(childProcess.instance)
         }
         childProcess.instance.send({
             action: 'start',
@@ -54,10 +56,11 @@ setInterval(() => {
         })
         i++
     }
-}, process.env.POLLING_INTERVAL_MS)
+}, config.POLLING_INTERVAL_MS)
 
 function getOrCreateProcess() {
     if (warmInstancesQueueMap.size > 0) {
+        // (FIFO) The Map object holds key-value pairs and remembers the original insertion order of the keys
         const warmInstanceChildProcess = warmInstancesQueueMap.entries().next().value
         warmInstancesQueueMap.delete(warmInstanceChildProcess[0])
         return {instance: warmInstanceChildProcess[1], created: false}
@@ -66,7 +69,7 @@ function getOrCreateProcess() {
     }
 }
 
-function listenForChildProcessEvents(childProcess) {
+function listenOnChildProcessMessageEvent(childProcess) {
     childProcess.on('message', (msg) => {
         console.log('Listening for child message', msg)
         switch (msg.action) {
@@ -101,8 +104,8 @@ function killProcessById(id) {
 function handleErrorById(id) {
     const processData = activeInstancesMap.get(id)
     processData.retries++
-    if (processData.retries <= parseInt(process.env.MAX_RETRY_ATTEMPTS)) {
-        console.log(`Retry message.id:${id} for the ${processData.retries}'rd time`)
+    if (processData.retries <= config.MAX_RETRY_ATTEMPTS) {
+        console.log(`Retry message:${id} for the ${processData.retries}'rd time`)
         activeInstancesMap.set(id, processData)
         processData.process.send({
             action: 'start',
@@ -110,7 +113,7 @@ function handleErrorById(id) {
             message: processData.message
         })
     } else {
-        console.log(`Reached Max num of retries (${process.env.MAX_RETRY_ATTEMPTS}) for message.id:${id}`)
+        console.log(`Reached the Maximum number of retries (${config.MAX_RETRY_ATTEMPTS}) on message:${id}`)
         activeInstancesMap.delete(id)
         processData.process.kill()
     }
@@ -122,3 +125,8 @@ process.on('SIGINT', () => {
     }
     process.exit(0)
 })
+
+if (!config.SHOW_LOGS) {
+    console.log = () => {
+    }
+}
