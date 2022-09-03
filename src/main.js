@@ -12,7 +12,7 @@ const activeInstancesMap = new Map()
 const warmInstancesQueueMap = new Map()
 let totalInvocations = 0
 const app = express()
-let sharedFile = fs.openSync(config.FILE_NAME, 'a+')
+const sharedFile = fs.openSync(config.FILE_NAME, 'a+')
 
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({extended: true}))
