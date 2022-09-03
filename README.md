@@ -1,4 +1,4 @@
-# lumigo-developer-test
+# simple-fass-manager
 **Implement a simple auto scale mechanism**
 ## Architecture
 ![Architecture](assets/images/solutionArchitecture.png)
