@@ -51,8 +51,7 @@ setInterval(() => {
         })
         activeInstancesMap.set(message.id, {
             retries: 0,
-            process: childProcess.instance,
-            message: message.message
+            process: childProcess.instance
         })
         i++
     }
@@ -80,7 +79,7 @@ function listenOnChildProcessMessageEvent(childProcess) {
                 killProcessById(msg.id)
                 break
             case 'error':
-                handleErrorById(msg.id)
+                handleErrorById(msg.id, msg.message)
                 break
         }
     })
@@ -101,7 +100,7 @@ function killProcessById(id) {
     }
 }
 
-function handleErrorById(id) {
+function handleErrorById(id, message) {
     const processData = activeInstancesMap.get(id)
     processData.retries++
     if (processData.retries <= config.MAX_RETRY_ATTEMPTS) {
@@ -110,7 +109,7 @@ function handleErrorById(id) {
         processData.process.send({
             action: 'start',
             id,
-            message: processData.message
+            message
         })
     } else {
         console.log(`Reached the Maximum number of retries (${config.MAX_RETRY_ATTEMPTS}) on message:${id}`)

@@ -8,7 +8,8 @@ function init() {
         PORT: Joi.number().positive().required(),
         FILE_NAME: Joi.string().required(),
         MAX_RETRY_ATTEMPTS: Joi.number().positive().required(),
-        SHOW_LOGS: Joi.boolean().required()
+        SHOW_LOGS: Joi.boolean().required(),
+        LOCK_FILE_RETRIES: Joi.number().positive().required()
     })
 
     const {error, value} = schema.validate({
@@ -18,7 +19,8 @@ function init() {
         PORT: process.env.PORT,
         FILE_NAME: process.env.FILE_NAME,
         MAX_RETRY_ATTEMPTS: process.env.MAX_RETRY_ATTEMPTS,
-        SHOW_LOGS: process.env.SHOW_LOGS
+        SHOW_LOGS: process.env.SHOW_LOGS,
+        LOCK_FILE_RETRIES: process.env.LOCK_FILE_RETRIES
     })
     if (error) {
         throw new Error(`Config validation error: ${error.message}`)
